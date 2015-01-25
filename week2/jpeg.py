@@ -5,7 +5,6 @@ IMAGE = '../images/lena.bmp'
 IMAGE_GRAY = '../images/lena.gray.bmp'
 
 BLOCK_SIZE = 8
-QUANTIZATION_FACTOR = 2
 
 QUANTIZATION_MATRIX = np.array([
  [16, 11, 10, 16, 24, 40, 51, 61],
@@ -61,31 +60,40 @@ def quantize(img, factor=1):
   return quantized
 
 
-def jpeg_block(block):
+def jpeg_block(block, quantization=1):
   """Applies JPEG compression to an 8x8 block and reverts it"""
   dct = cv2.dct(np.float32(block))
-  quantized = quantize(dct, QUANTIZATION_FACTOR)
+  quantized = quantize(dct, quantization)
   reverted = cv2.dct(np.float32(quantized), None, cv2.DCT_INVERSE)
   return np.round(reverted)
 
 
-def jpeg_channel(channel):
+def jpeg_channel(channel, quantization=1):
   """Applies JPEG compression to an image channel and reverts it"""
   blocks = split_blocks(channel, BLOCK_SIZE)
-  newblocks = [jpeg_block(block) for block in blocks]
+  newblocks = [jpeg_block(block, quantization) for block in blocks]
   return assemble_blocks(newblocks, channel.shape)
+
+
+def jpeg_image(ycc, factors):
+  """Applies JPEG compression to an image in YCrCb with the specified quantization factors per channel and reverts it"""
+  jpeged = [jpeg_channel(channel, cf) for channel, cf in zip(cv2.split(ycc), factors)]
+  newycc = cv2.merge(jpeged)
+  newimg = cv2.cvtColor(newycc, cv2.COLOR_YCR_CB2RGB)
+  show_image('Compressed with YCrCb factors ' + str(factors), newimg)
 
 
 def main_jpeg():
   """Applies JPEG compression to an image in RGB and reverts it"""
   img = cv2.imread(IMAGE)
-  ycc = cv2.cvtColor(img, cv2.COLOR_RGB2YCR_CB)
-  jpeged = [jpeg_channel(channel) for channel in cv2.split(ycc)]
-  newycc = cv2.merge(jpeged)
-  newimg = cv2.cvtColor(newycc, cv2.COLOR_YCR_CB2RGB)
-
   show_image('Original', img)
-  show_image('Compressed', newimg)
+
+  ycc = cv2.cvtColor(img, cv2.COLOR_RGB2YCR_CB)
+
+  jpeg_image(ycc, [1,1,1])
+  jpeg_image(ycc, [1,8,8])
+  jpeg_image(ycc, [8,8,8])
+
 
 
 if __name__ == '__main__':
