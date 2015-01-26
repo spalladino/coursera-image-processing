@@ -33,11 +33,79 @@ def show_hist(img, title='Histogram'):
   show_image(y, title)
 
 
+def calc_entropy(img):
+  """Calculates entropy for a given image"""
+  # See http://stackoverflow.com/a/16650551/12791
+  hist = cv2.calcHist([img],[0],None,[256],[0,256])
+  hist = hist.ravel()/hist.sum()
+  logs = np.nan_to_num(np.log2(hist))
+  entropy = -1 * (hist*logs).sum()
+  return entropy
+
+
+def pixels(img):
+  """Yields (pixels, i, j) of an image in row order"""
+  rows, cols = img.shape
+  for i in range(rows):
+    for j in range(cols):
+      yield (img.item(i,j), i, j)
+
+
+def predictive_compress(img, predictor):
+  """Compresses an image using given predictor"""
+  output = np.zeros(img.shape)
+  for pixel, i, j in pixels(img):
+    predicted = predictor(img, i, j)
+    output.itemset(i, j, pixel - predicted)
+
+  return np.uint8(np.round(output))
+
+
+def predictive_uncompress(img, predictor):
+  """Uncompresses an image using given predictor"""
+  uncompressed = np.zeros(img.shape)
+  for error, i, j in pixels(img):
+    predicted = predictor(uncompressed, i, j)
+    uncompressed.itemset(i, j, predicted + error)
+
+  return np.uint8(np.round(uncompressed))
+
+
+def predictor_previous_row(img, i, j):
+  """Predicts pixel based on the value of (-1, 0)"""
+  if i == 0: return 128
+  return img.item(i-1, j)
+
+
+def predictor_previous_col(img, i, j):
+  """Predicts pixel based on the value of (0, -1)"""
+  if j == 0: return 128
+  return img.item(i, j-1)
+
+
+def predictor_average(img, i, j):
+  """Predicts pixel based on the value of the average of (0, -1), (-1, 0) and (-1, -1)"""
+  neighbours = []
+  if i != 0: neighbours.append(img.item(i-1, j))
+  if j != 0: neighbours.append(img.item(i, j-1))
+  if i != 0 and j != 0: neighbours.append(img.item(i-1, j-1))
+  if len(neighbours) == 0: return 128
+  return sum(neighbours)/len(neighbours)
+
+
+def entropy_for_predictor(img, predictor):
+  """Returns entropy for a given predictor"""
+  compressed = predictive_compress(img, predictor)
+  return calc_entropy(img)
+
+
 def main_pred():
-  # TODO: Implemente predictive compression
   img = cv2.imread(IMAGE_GRAY, 0)
-  show_hist(img, 'Lena')
-  show_image(img, 'Lena')
+
+  for predictor in [predictor_previous_row, predictor_previous_col, predictor_average]:
+    compressed = predictive_compress(img, predictor)
+    print "Entropy with {0}: {1}".format(predictor.__name__, str(calc_entropy(compressed)))
+    show_hist(compressed + 128, predictor.__name__)
 
 
 if __name__ == '__main__':
